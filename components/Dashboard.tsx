@@ -1,8 +1,9 @@
-import React from 'react';
-import type { DashboardData, AIRecommendation } from '../types';
+import React, { useState } from 'react';
+import type { DashboardData, AIRecommendation, Metric } from '../types';
 import { PriceTicker } from './PriceTicker';
 import { AIAdvisor } from './AIAdvisor';
 import { MetricCard } from './MetricCard';
+import { MetricChartModal } from './MetricChartModal';
 import { BitcoinIcon } from './icons/BitcoinIcon';
 import { RefreshIcon } from './icons/RefreshIcon';
 
@@ -14,6 +15,8 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ data, aiRecommendation, isAiLoading, onRefresh }) => {
+  const [zoomedMetric, setZoomedMetric] = useState<Metric | null>(null);
+
   return (
     <div className="container mx-auto max-w-7xl">
       <header className="flex flex-col sm:flex-row justify-between items-center mb-8">
@@ -39,10 +42,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, aiRecommendation, is
         
         <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {data.metrics.map((metric) => (
-            <MetricCard key={metric.name} metric={metric} />
+            <MetricCard 
+              key={metric.name} 
+              metric={metric}
+              onZoom={() => setZoomedMetric(metric)}
+            />
           ))}
         </div>
       </main>
+
+      {zoomedMetric && (
+        <MetricChartModal 
+          metric={zoomedMetric} 
+          onClose={() => setZoomedMetric(null)} 
+        />
+      )}
     </div>
   );
 };

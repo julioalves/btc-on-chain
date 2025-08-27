@@ -16,6 +16,7 @@ import { InfoIcon } from './icons/InfoIcon';
 
 interface MetricCardProps {
   metric: Metric;
+  onZoom: () => void;
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -71,7 +72,7 @@ const ChartContextLayers: React.FC<{ metricName: string }> = ({ metricName }) =>
   }
 };
 
-export const MetricCard: React.FC<MetricCardProps> = ({ metric }) => {
+export const MetricCard: React.FC<MetricCardProps> = ({ metric, onZoom }) => {
   const hasChartData = metric.historicalData && metric.historicalData.length > 0;
   
   const formatYAxis = (tickItem: number) => {
@@ -85,7 +86,10 @@ export const MetricCard: React.FC<MetricCardProps> = ({ metric }) => {
   };
 
   return (
-    <div className="bg-[#1e1f22] p-6 rounded-3xl shadow-lg border border-white/10 flex flex-col justify-between transition-all duration-300 hover:border-blue-500/50 hover:shadow-blue-500/10">
+    <div 
+      className="bg-[#1e1f22] p-6 rounded-3xl shadow-lg border border-white/10 flex flex-col justify-between transition-all duration-300 hover:border-blue-500/50 hover:shadow-blue-500/10 cursor-pointer transform hover:scale-[1.02]"
+      onClick={onZoom}
+    >
       <div className="flex-grow">
         <div className="flex justify-between items-start mb-2">
           <h3 className="text-md font-medium text-white/60">{metric.name}</h3>
