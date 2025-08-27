@@ -30,44 +30,44 @@ const calculateRollingAverage = (data: { y: number }[], windowSize: number): num
     return averages;
 };
 
+// A helper to fetch data and provide context on failure
+const fetchWithContext = async (name: string, url: string) => {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            // Create a specific error for HTTP issues
+            throw new Error(`HTTP error! status: ${response.status} for ${name}`);
+        }
+        return await response.json();
+    } catch (error) {
+        // This will catch network errors ('Failed to fetch') and the HTTP error above
+        console.error(`Request failed for ${name}:`, error);
+        // Re-throw with more context so Promise.all fails with a clear message.
+        throw new Error(`Could not fetch data for ${name}. Reason: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+};
 
 export const fetchDashboardData = async (): Promise<DashboardData> => {
     try {
         const BASE_CHART_URL = 'https://api.blockchain.info/charts';
 
-        // Use Promise.all to fetch all data concurrently
+        // Use Promise.all with the contextual fetch helper.
+        // The Stock-to-Flow endpoint is returning 404 and has been removed for stability.
         const [
-            priceResponse,
-            fearAndGreedResponse,
-            hashRateChartResponse,
-            mvrvChartResponse,
-            priceChartResponse, // For Mayer Multiple (200d MA)
-            minersRevenueChartResponse, // For Puell Multiple (365d MA)
-            transactionsChartResponse // Replacement for LTH Supply
+            priceData,
+            fearAndGreedData,
+            hashRateChartData,
+            priceChartRawData,
+            minersRevenueRawData,
+            transactionsChartData,
         ] = await Promise.all([
-            fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,brl'),
-            fetch('https://api.alternative.me/fng/?limit=30'),
-            fetch(`${BASE_CHART_URL}/hash-rate?timespan=30days&format=json&cors=true`),
-            fetch(`${BASE_CHART_URL}/mvrv?timespan=30days&format=json&cors=true`),
-            fetch(`${BASE_CHART_URL}/market-price?timespan=230days&format=json&cors=true`), // 30d history of 200d MA
-            fetch(`${BASE_CHART_URL}/miners-revenue?timespan=400days&format=json&cors=true`), // 30d history of 365d MA
-            fetch(`${BASE_CHART_URL}/n-transactions?timespan=30days&format=json&cors=true`),
+            fetchWithContext('CoinGecko Price', 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,brl'),
+            fetchWithContext('Fear & Greed Index', 'https://api.alternative.me/fng/?limit=30'),
+            fetchWithContext('Hash Rate Chart', `${BASE_CHART_URL}/hash-rate?timespan=30days&format=json&cors=true`),
+            fetchWithContext('Price Chart (Mayer)', `${BASE_CHART_URL}/market-price?timespan=230days&format=json&cors=true`),
+            fetchWithContext('Miners Revenue Chart (Puell)', `${BASE_CHART_URL}/miners-revenue?timespan=400days&format=json&cors=true`),
+            fetchWithContext('Transactions Chart', `${BASE_CHART_URL}/n-transactions?timespan=30days&format=json&cors=true`),
         ]);
-        
-        // Validate all API responses
-        const responses = [priceResponse, fearAndGreedResponse, hashRateChartResponse, mvrvChartResponse, priceChartResponse, minersRevenueChartResponse, transactionsChartResponse];
-        for (const res of responses) {
-            if (!res.ok) throw new Error(`Failed to fetch data: ${res.statusText}`);
-        }
-
-        // Parse all responses
-        const priceData = await priceResponse.json();
-        const fearAndGreedData = await fearAndGreedResponse.json();
-        const hashRateChartData = await hashRateChartResponse.json();
-        const mvrvChartData = await mvrvChartResponse.json();
-        const priceChartRawData = await priceChartResponse.json();
-        const minersRevenueRawData = await minersRevenueChartResponse.json();
-        const transactionsChartData = await transactionsChartResponse.json();
 
         // --- Process API Data ---
 
@@ -86,13 +86,13 @@ export const fetchDashboardData = async (): Promise<DashboardData> => {
         const hashRateEHS = latestHashRateTHS / 1_000_000;
         const hashRateHistoricalEHS = hashRateHistoricalTHS.map(d => ({...d, value: d.value / 1_000_000}));
 
-        const { latestValue: mvrvValue, historicalData: mvrvHistorical } = processChartData(mvrvChartData);
-
         const { latestValue: transactionsValue, historicalData: transactionsHistorical } = processChartData(transactionsChartData);
 
         // Calculate Mayer Multiple
         const pricesForMayer = priceChartRawData.values;
+        if (!pricesForMayer || pricesForMayer.length < 200) throw new Error("Not enough price data for Mayer Multiple");
         const rolling200dMA = calculateRollingAverage(pricesForMayer, 200);
+        if (rolling200dMA.length < 30) throw new Error("Not enough 200d MA data for Mayer Multiple");
         const last30Prices = pricesForMayer.slice(-30);
         const last30Rolling200dMA = rolling200dMA.slice(-30);
         const mayerValue = last30Prices[last30Prices.length - 1].y / last30Rolling200dMA[last30Rolling200dMA.length - 1];
@@ -103,7 +103,9 @@ export const fetchDashboardData = async (): Promise<DashboardData> => {
         
         // Calculate Puell Multiple
         const revenueForPuell = minersRevenueRawData.values;
+        if (!revenueForPuell || revenueForPuell.length < 365) throw new Error("Not enough revenue data for Puell Multiple");
         const rolling365dMA = calculateRollingAverage(revenueForPuell, 365);
+        if (rolling365dMA.length < 30) throw new Error("Not enough 365d MA data for Puell Multiple");
         const last30Revenues = revenueForPuell.slice(-30);
         const last30Rolling365dMA = rolling365dMA.slice(-30);
         const puellValue = last30Revenues[last30Revenues.length - 1].y / last30Rolling365dMA[last30Rolling365dMA.length - 1];
@@ -126,13 +128,6 @@ export const fetchDashboardData = async (): Promise<DashboardData> => {
                 description: "Poder computacional da rede",
                 tooltip: "A taxa de hash crescente indica uma rede forte e segura, com mais mineradores participando.",
                 historicalData: hashRateHistoricalEHS
-            },
-            {
-                name: "MVRV Ratio",
-                value: mvrvValue.toFixed(2),
-                description: "Valor de Mercado / Realizado",
-                tooltip: "Compara o valor de mercado com o valor realizado. >3.7 sugere topo, <1 sugere fundo.",
-                historicalData: mvrvHistorical
             },
             {
                 name: "Transações Diárias",
