@@ -1,0 +1,5 @@
+{
+  "name": "Bitcoin On-Chain Dashboard",
+  "description": "An advanced dashboard to monitor key Bitcoin on-chain metrics, view real-time prices in USD and BRL, and receive AI-powered investment recommendations based on the data.",
+  "requestFramePermissions": []
+}
